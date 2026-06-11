@@ -49,7 +49,7 @@ resource "azurerm_key_vault" "main" {
 
   # Lifecycle: prevenir destrucción accidental del Key Vault en producción
   lifecycle {
-    prevent_destroy = false  # true en producción; false en lab para poder hacer destroy
+    prevent_destroy = false  # En lab: false para poder hacer destroy. En producción: cambiar a true
   }
 }
 

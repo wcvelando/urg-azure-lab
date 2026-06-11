@@ -80,7 +80,10 @@ resource "azurerm_monitor_diagnostic_setting" "key_vault" {
   target_resource_id         = var.key_vault_id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   enabled_log { category = "AuditEvent" }
-  metric { category = "AllMetrics"; enabled = false }
+  metric {
+    category = "AllMetrics"
+     enabled = false
+  }
 }
 
 # ── Action Group ──────────────────────────────────────────────
@@ -124,13 +127,18 @@ resource "azurerm_sentinel_alert_rule_scheduled" "keyvault_unusual_access" {
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true; lookback_duration = "PT1H"
-      reopen_closed_incidents = false; entity_matching_method = "AllEntities"
+      enabled = true
+       lookback_duration = "PT1H"
+      reopen_closed_incidents = false
+       entity_matching_method = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
-    field_mapping { identifier = "Address"; column_name = "CallerIP" }
+    field_mapping {
+      identifier = "Address"
+       column_name = "CallerIP"
+    }
   }
 }
 
@@ -159,8 +167,10 @@ resource "azurerm_sentinel_alert_rule_scheduled" "sql_injection" {
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true; lookback_duration = "PT30M"
-      reopen_closed_incidents = true; entity_matching_method = "AllEntities"
+      enabled = true
+       lookback_duration = "PT30M"
+      reopen_closed_incidents = true
+       entity_matching_method = "AllEntities"
     }
   }
 }
@@ -194,13 +204,18 @@ resource "azurerm_sentinel_alert_rule_scheduled" "nsg_change" {
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true; lookback_duration = "PT1H"
-      reopen_closed_incidents = false; entity_matching_method = "AllEntities"
+      enabled = true
+       lookback_duration = "PT1H"
+      reopen_closed_incidents = false
+       entity_matching_method = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "Account"
-    field_mapping { identifier = "FullName"; column_name = "Caller" }
+    field_mapping {
+      identifier = "FullName"
+       column_name = "Caller"
+    }
   }
 }
 
@@ -231,13 +246,18 @@ resource "azurerm_sentinel_alert_rule_scheduled" "keyvault_brute_force" {
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true; lookback_duration = "PT1H"
-      reopen_closed_incidents = false; entity_matching_method = "AllEntities"
+      enabled = true
+       lookback_duration = "PT1H"
+      reopen_closed_incidents = false
+       entity_matching_method = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
-    field_mapping { identifier = "Address"; column_name = "CallerIP" }
+    field_mapping {
+      identifier = "Address"
+       column_name = "CallerIP"
+    }
   }
 }
 
@@ -275,13 +295,18 @@ resource "azurerm_sentinel_alert_rule_scheduled" "ti_malicious_ip" {
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true; lookback_duration = "PT1H"
-      reopen_closed_incidents = false; entity_matching_method = "AllEntities"
+      enabled = true
+       lookback_duration = "PT1H"
+      reopen_closed_incidents = false
+       entity_matching_method = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
-    field_mapping { identifier = "Address"; column_name = "CallerIP" }
+    field_mapping {
+      identifier = "Address"
+       column_name = "CallerIP"
+    }
   }
 }
 
@@ -313,12 +338,17 @@ resource "azurerm_sentinel_alert_rule_scheduled" "ti_watchlist" {
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true; lookback_duration = "PT30M"
-      reopen_closed_incidents = false; entity_matching_method = "AllEntities"
+      enabled = true
+       lookback_duration = "PT30M"
+      reopen_closed_incidents = false
+       entity_matching_method = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
-    field_mapping { identifier = "Address"; column_name = "SourceIP" }
+    field_mapping {
+      identifier = "Address"
+       column_name = "SourceIP"
+    }
   }
 }
