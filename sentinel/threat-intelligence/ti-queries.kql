@@ -1,0 +1,158 @@
+# ============================================================
+# sentinel/threat-intelligence/ti-queries.kql
+#
+# Consultas KQL para Threat Intelligence en Azure Sentinel
+# Unidad IV — Semana 14 — Seguridad en Cloud Services UGR
+#
+# Uso:
+#   portal.azure.com → Log Analytics → law-sentinel-lab → Logs
+#   Copiar y ejecutar cada query individualmente
+# ============================================================
+
+# ── Query TI-1: Resumen de IOCs ingestados por fuente ────────
+# Muestra cuántos indicadores hay en la tabla y de qué fuentes vienen.
+# Ejecutar primero para verificar que los conectores están funcionando.
+ThreatIntelligenceIndicator
+| where TimeGenerated > ago(7d)
+| where Active == true
+| summarize
+    TotalIOCs    = count(),
+    IPs          = countif(isnotempty(NetworkIP)),
+    Domains      = countif(isnotempty(DomainName)),
+    URLs         = countif(isnotempty(Url)),
+    FileHashes   = countif(isnotempty(FileHashValue))
+  by SourceSystem
+| order by TotalIOCs desc
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-2: Top 20 IPs maliciosas más recientes ──────────
+ThreatIntelligenceIndicator
+| where TimeGenerated > ago(7d)
+| where Active == true
+| where isnotempty(NetworkIP) or isnotempty(NetworkSourceIP)
+| extend MaliciousIP = coalesce(NetworkIP, NetworkSourceIP)
+| summarize
+    LastSeen         = max(TimeGenerated),
+    ConfidenceScore  = max(ConfidenceScore),
+    ThreatType       = any(ThreatType),
+    Description      = any(Description),
+    Source           = any(SourceSystem)
+  by MaliciousIP
+| where ConfidenceScore >= 50
+| top 20 by ConfidenceScore desc
+| project MaliciousIP, ConfidenceScore, ThreatType, Description, Source, LastSeen
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-3: Correlación completa IOCs ↔ actividad del lab ─
+// Esta es la query más importante del lab de TI.
+// Cruza TODA la actividad reciente contra los IOCs conocidos.
+let TI_IPs = ThreatIntelligenceIndicator
+    | where TimeGenerated > ago(7d)
+    | where Active == true
+    | where isnotempty(NetworkIP) or isnotempty(NetworkSourceIP)
+    | extend MaliciousIP = coalesce(NetworkIP, NetworkSourceIP)
+    | summarize
+        TI_ConfScore  = max(ConfidenceScore),
+        TI_ThreatType = any(ThreatType),
+        TI_Source     = any(SourceSystem),
+        TI_Desc       = any(Description)
+      by MaliciousIP;
+union
+(   // Fuente 1: accesos al Key Vault
+    AzureDiagnostics
+    | where ResourceType == "VAULTS"
+    | where TimeGenerated > ago(24h)
+    | extend SourceIP = tostring(callerIpAddress_s), ActivitySource = "KeyVault"
+),
+(   // Fuente 2: actividad Azure general
+    AzureActivity
+    | where TimeGenerated > ago(24h)
+    | extend SourceIP = tostring(CallerIpAddress), ActivitySource = "AzureControl"
+)
+| where isnotempty(SourceIP)
+| join kind=inner TI_IPs on $left.SourceIP == $right.MaliciousIP
+| project
+    TimeGenerated,
+    SourceIP,
+    ActivitySource,
+    OperationName,
+    TI_ThreatType,
+    TI_ConfScore,
+    TI_Source,
+    TI_Desc
+| order by TI_ConfScore desc, TimeGenerated desc
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-4: IOCs de la Watchlist detectados en actividad ──
+// Usa la watchlist watchlist-lab-iocs cargada manualmente.
+// Perfecta para demos en clase: cargar una IP antes de la demo.
+let WatchlistIOCs = _GetWatchlist("watchlist-lab-iocs")
+    | project
+        IPAddress   = tostring(IPAddress),
+        Description = tostring(Description),
+        ThreatType  = tostring(ThreatType),
+        AddedBy     = tostring(AddedBy);
+AzureDiagnostics
+| where TimeGenerated > ago(1h)
+| extend SourceIP = tostring(callerIpAddress_s)
+| where isnotempty(SourceIP)
+| join kind=inner WatchlistIOCs on $left.SourceIP == $right.IPAddress
+| project
+    TimeGenerated,
+    SourceIP,
+    OperationName,
+    ResourceType,
+    Description,
+    ThreatType,
+    AddedBy
+| order by TimeGenerated desc
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-5: Distribución de tipos de amenaza (para graficar) ─
+ThreatIntelligenceIndicator
+| where TimeGenerated > ago(7d)
+| where Active == true
+| where isnotempty(ThreatType)
+| summarize Count = count() by ThreatType
+| order by Count desc
+| render piechart
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-6: Timeline de IOCs ingestados por día ──────────
+ThreatIntelligenceIndicator
+| where TimeGenerated > ago(30d)
+| summarize NewIOCs = count() by bin(TimeGenerated, 1d), SourceSystem
+| render timechart
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-7: Verificar que el conector OTX está funcionando ─
+ThreatIntelligenceIndicator
+| where SourceSystem == "AlienVault OTX"
+| summarize
+    Total       = count(),
+    LastIngested = max(TimeGenerated)
+  by SourceSystem
+| project SourceSystem, Total, LastIngested,
+    Status = iff(LastIngested > ago(25h), "✅ OK", "⚠️ Sin datos en 25h")
+
+# ──────────────────────────────────────────────────────────────
+
+# ── Query TI-8: Incidentes con enriquecimiento TI ────────────
+// Muestra los incidentes que fueron procesados por el playbook de TI.
+SecurityIncident
+| where TimeGenerated > ago(7d)
+| where Comments has "ENRIQUECIMIENTO CON THREAT INTELLIGENCE"
+| project
+    TimeGenerated,
+    IncidentNumber,
+    Title,
+    Severity,
+    Status,
+    Comments
+| order by TimeGenerated desc

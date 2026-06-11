@@ -1,0 +1,10 @@
+# environments/lab/backend.tf.example
+# Copiar como backend.tf y completar. backend.tf está en .gitignore.
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "rg-terraform-state"
+    storage_account_name = "COMPLETAR_STORAGE_ACCOUNT"
+    container_name       = "tfstate"
+    key                  = "lab/student-records.tfstate"
+  }
+}

@@ -1,0 +1,208 @@
+name: DevSecOps Pipeline - Azure Lab
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  packages: write
+
+jobs:
+
+  gitleaks:
+    name: "🔑 Gitleaks - Secret Detection"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      - if: always()
+        run: |
+          echo "### 🔑 Gitleaks Results" >> $GITHUB_STEP_SUMMARY
+          echo "Hallazgos esperados: SECRET_KEY y DB_PASSWORD en app/app.py" >> $GITHUB_STEP_SUMMARY
+
+  semgrep:
+    name: "🔍 Semgrep - SAST"
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          semgrep scan \
+            --config=p/python \
+            --config=p/owasp-top-ten \
+            --config=p/secrets \
+            --sarif --output=semgrep-results.sarif \
+            --error app/ || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+
+  dependency-check:
+    name: "📦 OWASP Dependency-Check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "student-records-lab"
+          path: "app/"
+          format: "HTML"
+          out: "dependency-check-report"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: dependency-check-report/
+
+  checkov:
+    name: "🏗️ Checkov - IaC Security"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install checkov
+      - run: |
+          checkov --directory terraform/ --framework terraform \
+            --output sarif --output-file-path checkov-results.sarif \
+            --soft-fail || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+          category: checkov
+
+  conftest:
+    name: "📋 OPA/Conftest - Policy as Code"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          wget -q https://github.com/open-policy-agent/conftest/releases/download/v0.51.0/conftest_0.51.0_Linux_x86_64.tar.gz
+          tar xzf conftest_0.51.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+      - run: |
+          conftest test --policy policies/conftest/ \
+            --parser hcl2 terraform/main.tf || true
+
+  trivy:
+    name: "🐳 Trivy - Container Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t student-records:test ./app/
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "student-records:test"
+          format: "sarif"
+          output: "trivy-image-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "config"
+          scan-ref: "terraform/"
+          format: "table"
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-image-results.sarif
+          category: trivy
+
+  build-and-push:
+    name: "📦 Build & Push → GHCR"
+    runs-on: ubuntu-latest
+    needs: [trivy]
+    if: github.event_name != 'pull_request'
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/student-records
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: |
+          echo "### 📦 Imagen publicada en GHCR" >> $GITHUB_STEP_SUMMARY
+          echo "ghcr.io/${{ github.repository_owner }}/student-records:latest" >> $GITHUB_STEP_SUMMARY
+
+  zap-dast:
+    name: "🕷️ OWASP ZAP - DAST"
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/student-records:latest
+          docker run -d --name student-records-test -p 5000:5000 \
+            -e DB_PATH=/tmp/students.db \
+            ghcr.io/${{ github.repository_owner }}/student-records:latest
+          sleep 15
+          curl -f http://localhost:5000/ || (docker logs student-records-test && exit 1)
+      - uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: "http://localhost:5000"
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: "-a"
+          allow_issue_writing: false
+          fail_action: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-report
+          path: report_html.html
+      - if: always()
+        run: docker rm -f student-records-test || true
+
+  summary:
+    name: "📊 Resumen de Seguridad"
+    runs-on: ubuntu-latest
+    needs: [gitleaks, semgrep, dependency-check, checkov, conftest, trivy, build-and-push, zap-dast]
+    if: always()
+    steps:
+      - run: |
+          echo "# 🔐 Resumen DevSecOps Pipeline - Lab Semana 12" >> $GITHUB_STEP_SUMMARY
+          echo "| Herramienta | Qué detecta | OWASP |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|-------------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks | Secretos hardcodeados | A02 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Semgrep | SQL Injection, secretos | A03, A02 |" >> $GITHUB_STEP_SUMMARY
+          echo "| OWASP Dep-Check | Dependencias vulnerables | A06 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkov | Misconfiguración IaC | A05 |" >> $GITHUB_STEP_SUMMARY
+          echo "| OPA/Conftest | Políticas propias | A05 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | CVEs en imagen Docker | A06 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build & Push | Imagen en GHCR | — |" >> $GITHUB_STEP_SUMMARY
+          echo "| OWASP ZAP | Vulnerabilidades runtime | A03, A07 |" >> $GITHUB_STEP_SUMMARY

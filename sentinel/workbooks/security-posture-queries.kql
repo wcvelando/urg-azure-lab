@@ -1,0 +1,72 @@
+# sentinel/workbooks/security-posture-queries.kql
+# Consultas KQL para el dashboard de postura de seguridad
+
+# Query 1: Incidentes por severidad (últimos 7 días)
+SecurityIncident
+| where TimeGenerated > ago(7d)
+| summarize Count = count() by Severity, Status
+| order by Count desc
+
+# Query 2: Accesos inusuales al Key Vault
+AzureDiagnostics
+| where ResourceType == "VAULTS"
+| where TimeGenerated > ago(24h)
+| extend CallerIP = tostring(callerIpAddress_s)
+| extend IsUnusual = iff(CallerIP !startswith "10.0.1.", "YES", "NO")
+| summarize Count = count() by bin(TimeGenerated, 1h), OperationName, IsUnusual
+| render timechart
+
+# Query 3: SQL Injection en logs
+ContainerInstanceLog_CL
+| where TimeGenerated > ago(24h)
+| where LogEntry_s has_any ("' OR ", "1=1", "UNION SELECT", "DROP TABLE")
+| project TimeGenerated, ContainerGroup_s, LogEntry_s
+| order by TimeGenerated desc
+
+# Query 4: Cambios en NSG
+AzureActivity
+| where TimeGenerated > ago(24h)
+| where OperationNameValue contains "NETWORKSECURITYGROUP"
+| where ActivityStatusValue == "Success"
+| project TimeGenerated, OperationNameValue, Caller, ResourceGroup
+| order by TimeGenerated desc
+
+# Query 5: Top IPs con accesos fallidos al Key Vault
+AzureDiagnostics
+| where ResourceType == "VAULTS"
+| where TimeGenerated > ago(24h)
+| where ResultType in ("Unauthorized","Forbidden")
+| summarize FailedAttempts = count() by CallerIP = callerIpAddress_s
+| top 10 by FailedAttempts desc
+| render barchart
+
+# Query 6: IOCs ingestados por fuente (Threat Intelligence)
+ThreatIntelligenceIndicator
+| where TimeGenerated > ago(7d)
+| where Active == true
+| summarize TotalIOCs=count(), IPs=countif(isnotempty(NetworkIP)) by SourceSystem
+| order by TotalIOCs desc
+
+# Query 7: Correlación IOCs vs actividad del lab
+let TI_IPs = ThreatIntelligenceIndicator
+    | where Active == true
+    | where isnotempty(NetworkIP)
+    | summarize TI_Score=max(ConfidenceScore), TI_Type=any(ThreatType) by MaliciousIP=NetworkIP;
+AzureDiagnostics
+| where ResourceType == "VAULTS"
+| where TimeGenerated > ago(24h)
+| extend SourceIP = tostring(callerIpAddress_s)
+| join kind=inner TI_IPs on $left.SourceIP == $right.MaliciousIP
+| project TimeGenerated, SourceIP, OperationName, TI_Type, TI_Score
+
+# Query 8: Incidentes sin propietario (riesgo de SLA)
+SecurityIncident
+| where TimeGenerated > ago(7d)
+| where Status == "Active"
+| where isnull(Owner) or Owner == ""
+| extend AgeHours = datetime_diff("hour", now(), TimeGenerated)
+| extend SLABreached = iff(
+    (Severity == "High" and AgeHours > 4) or
+    (Severity == "Medium" and AgeHours > 24), "YES", "NO")
+| project TimeGenerated, Title, Severity, AgeHours, SLABreached
+| order by AgeHours desc

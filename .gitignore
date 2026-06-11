@@ -1,0 +1,36 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfplan
+tfplan
+terraform/backend.tf
+terraform/sentinel/backend.tf
+terraform/sentinel/threat-intelligence/backend.tf
+
+# Variables con secretos
+*.tfvars
+!*.tfvars.example
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+venv/
+.venv/
+
+# Credenciales
+*.pem
+*.key
+.env.local
+secrets.json
+
+# Reportes de seguridad
+report_html.html
+dependency-check-report/
+*.sarif
+
+# OS
+.DS_Store
+Thumbs.db

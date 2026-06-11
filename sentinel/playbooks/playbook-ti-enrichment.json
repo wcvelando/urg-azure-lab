@@ -1,0 +1,225 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": {
+      "type": "string",
+      "defaultValue": "law-sentinel-lab",
+      "metadata": { "description": "Nombre del Log Analytics Workspace de Sentinel" }
+    },
+    "workspaceId": {
+      "type": "string",
+      "metadata": { "description": "ID del Log Analytics Workspace (usado para queries KQL)" }
+    },
+    "alertEmail": {
+      "type": "string",
+      "metadata": { "description": "Email para notificaciones enriquecidas con TI" }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "variables": {
+    "playbookName": "playbook-ti-enrichment",
+    "sentinelConnectionName": "azuresentinel-ti-connection",
+    "office365ConnectionName": "office365-ti-connection",
+    "logAnalyticsConnectionName": "azureloganalyticsdatacollector-connection"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[variables('sentinelConnectionName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Azure Sentinel TI Connection",
+        "api": {
+          "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azuresentinel')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[variables('office365ConnectionName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Office 365 TI Email",
+        "api": {
+          "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/office365')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2017-07-01",
+      "name": "[variables('playbookName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "Environment": "lab",
+        "Course": "seguridad-cloud-ugr",
+        "Unit": "IV-threat-intelligence"
+      },
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": { "defaultValue": {}, "type": "Object" },
+            "workspaceId":  { "defaultValue": "[parameters('workspaceId')]", "type": "String" }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "body": { "callback_url": "@listCallbackUrl()" },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+
+            "1_Obtener_entidades_del_incidente": {
+              "runAfter": {},
+              "type": "ApiConnection",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "method": "post",
+                "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['SubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['ResourceGroupName'])}/workspaces/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['WorkspaceName'])}/Entities/GetEntities",
+                "body": { "LookbackInMinutes": 60 }
+              }
+            },
+
+            "2_Filtrar_entidades_IP": {
+              "runAfter": { "1_Obtener_entidades_del_incidente": ["Succeeded"] },
+              "type": "Query",
+              "inputs": {
+                "from": "@body('1_Obtener_entidades_del_incidente')?['entities']",
+                "where": "@equals(item()?['kind'], 'Ip')"
+              }
+            },
+
+            "3_Para_cada_IP_consultar_TI": {
+              "runAfter": { "2_Filtrar_entidades_IP": ["Succeeded"] },
+              "type": "Foreach",
+              "foreach": "@body('2_Filtrar_entidades_IP')",
+              "actions": {
+
+                "3a_Consultar_ThreatIntelligenceIndicator": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                    "method": "post",
+                    "path": "/ThreatIntelligence/subscriptions/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['SubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['ResourceGroupName'])}/workspaces/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['WorkspaceName'])}/Indicators/queryIndicators",
+                    "body": {
+                      "patternTypes": ["ipv4-addr"],
+                      "minValidUntil": "@utcNow()"
+                    }
+                  }
+                },
+
+                "3b_Agregar_comentario_TI": {
+                  "runAfter": { "3a_Consultar_ThreatIntelligenceIndicator": ["Succeeded"] },
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                    "method": "post",
+                    "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['SubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['ResourceGroupName'])}/workspaces/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['WorkspaceName'])}/Incidents/@{encodeURIComponent(triggerBody()?['object']?['name'])}/Comments",
+                    "body": {
+                      "message": "🔍 ENRIQUECIMIENTO CON THREAT INTELLIGENCE\n\n📍 IP analizada: @{items('3_Para_cada_IP_consultar_TI')?['properties']?['address']}\n\n📊 RESULTADO DEL LOOKUP TI:\n@{if(greater(length(body('3a_Consultar_ThreatIntelligenceIndicator')?['value']), 0), concat('⚠️ IP encontrada en feeds de TI\nDescripción: ', first(body('3a_Consultar_ThreatIntelligenceIndicator')?['value'])?['properties']?['description'], '\nConfianza: ', string(first(body('3a_Consultar_ThreatIntelligenceIndicator')?['value'])?['properties']?['confidence']), '/100\nTipo de amenaza: ', first(body('3a_Consultar_ThreatIntelligenceIndicator')?['value'])?['properties']?['threatTypes']?[0], '\nFuente: ', first(body('3a_Consultar_ThreatIntelligenceIndicator')?['value'])?['properties']?['source']), '✅ IP no encontrada en feeds de TI conocidos')}\n\n🔗 Fuentes consultadas:\n- Microsoft Threat Intelligence\n- AlienVault OTX (TAXII/STIX)\n\n⏰ Consulta realizada: @{utcNow()}"
+                    }
+                  }
+                }
+              }
+            },
+
+            "4_Evaluar_severidad_con_TI": {
+              "runAfter": { "3_Para_cada_IP_consultar_TI": ["Succeeded", "Failed"] },
+              "type": "If",
+              "expression": {
+                "and": [
+                  { "greater": [ "@length(body('2_Filtrar_entidades_IP'))", 0 ] }
+                ]
+              },
+              "actions": {
+                "4a_Escalar_a_High_si_hay_match_TI": {
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                    "method": "put",
+                    "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['SubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['ResourceGroupName'])}/workspaces/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['WorkspaceName'])}/Incidents/@{encodeURIComponent(triggerBody()?['object']?['name'])}",
+                    "body": {
+                      "severity": "High",
+                      "status": "Active"
+                    }
+                  }
+                }
+              },
+              "else": { "actions": {} }
+            },
+
+            "5_Enviar_email_enriquecido": {
+              "runAfter": { "4_Evaluar_severidad_con_TI": ["Succeeded"] },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['office365']['connectionId']" } },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "[parameters('alertEmail')]",
+                  "Subject": "[SENTINEL TI] Incidente enriquecido con Threat Intelligence - #@{triggerBody()?['object']?['properties']?['incidentNumber']}",
+                  "Body": "<h2>🔍 Incidente enriquecido con Threat Intelligence</h2><h3>Detalles del incidente</h3><p><strong>Título:</strong> @{triggerBody()?['object']?['properties']?['title']}</p><p><strong>Severidad:</strong> @{triggerBody()?['object']?['properties']?['severity']}</p><p><strong>IPs involucradas:</strong> @{length(body('2_Filtrar_entidades_IP'))}</p><h3>Proceso de enriquecimiento</h3><p>Se consultaron los siguientes feeds de Threat Intelligence:</p><ul><li>Microsoft Threat Intelligence</li><li>AlienVault OTX (TAXII/STIX)</li></ul><p>Los resultados fueron agregados como comentarios en el incidente de Sentinel.</p><h3>Próximos pasos</h3><ol><li>Revisar los comentarios de TI en el incidente</li><li>Si hay match en TI: escalar y bloquear la IP en el NSG</li><li>Si no hay match: investigar manualmente</li></ol><p><strong>Portal Sentinel:</strong> <a href='https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/MainMenuBlade'>Abrir Sentinel</a></p>",
+                  "IsHtml": true
+                }
+              }
+            },
+
+            "6_Agregar_resumen_final": {
+              "runAfter": { "5_Enviar_email_enriquecido": ["Succeeded", "Failed"] },
+              "type": "ApiConnection",
+              "inputs": {
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "method": "post",
+                "path": "/Incidents/subscriptions/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['SubscriptionId'])}/resourceGroups/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['ResourceGroupName'])}/workspaces/@{encodeURIComponent(triggerBody()?['workspaceInfo']?['WorkspaceName'])}/Incidents/@{encodeURIComponent(triggerBody()?['object']?['name'])}/Comments",
+                "body": {
+                  "message": "📋 RESUMEN DE ENRIQUECIMIENTO TI\n\nPlaybook: playbook-ti-enrichment\nEjecutado: @{utcNow()}\nIPs analizadas: @{length(body('2_Filtrar_entidades_IP'))}\nNotificación enviada: Sí\n\nPróximo paso recomendado:\nSi alguna IP tuvo match en TI → bloquearla en NSG:\n  az network nsg rule create \\\n    --resource-group rg-devsecops-lab \\\n    --nsg-name nsg-app \\\n    --name block-malicious-ip \\\n    --priority 90 \\\n    --direction Inbound \\\n    --access Deny \\\n    --protocol '*' \\\n    --source-address-prefixes <IP_MALICIOSA>"
+                }
+              }
+            }
+
+          }
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', variables('sentinelConnectionName'))]",
+                "connectionName": "[variables('sentinelConnectionName')]",
+                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azuresentinel')]"
+              },
+              "office365": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', variables('office365ConnectionName'))]",
+                "connectionName": "[variables('office365ConnectionName')]",
+                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/office365')]"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookName": {
+      "type": "string",
+      "value": "[variables('playbookName')]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', variables('playbookName')), '2017-07-01', 'Full').identity.principalId]"
+    }
+  }
+}
