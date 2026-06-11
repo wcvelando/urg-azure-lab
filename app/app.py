@@ -33,6 +33,8 @@ def init_db():
     conn.commit()
     conn.close()
 
+init_db()
+
 @app.route("/")
 def index():
     return jsonify({"message": "Student Records API", "version": "1.0"})
@@ -85,5 +87,4 @@ def update_student(student_id):
     return jsonify({"message": "Student updated"})
 
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)  # VULNERABILIDAD #4 (A05)
