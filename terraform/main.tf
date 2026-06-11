@@ -226,6 +226,12 @@ resource "azurerm_mysql_flexible_server" "main" {
   backup_retention_days        = 7
   geo_redundant_backup_enabled = false
   tags                         = var.tags
+
+  lifecycle {
+    # Azure assigns the availability zone when it is omitted. Provider 3.x can
+    # otherwise try to change that computed value during an unrelated update.
+    ignore_changes = [zone]
+  }
 }
 
 resource "azurerm_mysql_flexible_database" "students" {
