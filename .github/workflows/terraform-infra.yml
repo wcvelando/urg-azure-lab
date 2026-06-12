@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "terraform/environments/lab/**"
+      - "terraform/environments/**"
       - "terraform/modules/**"
   pull_request:
     branches: [main]
     paths:
-      - "terraform/environments/lab/**"
+      - "terraform/environments/**"
       - "terraform/modules/**"
   workflow_dispatch:
     inputs:

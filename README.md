@@ -8,14 +8,12 @@ lab-devsecops-azure/
 │   ├── app.py
 │   ├── requirements.txt
 │   └── Dockerfile
-├── terraform/                    # Infraestructura Azure (VNet, ACI, MySQL, Key Vault)
-│   ├── main.tf
-│   ├── backend.tf.example
-│   ├── setup-backend.sh          # Crea el Storage Account para tfstate
-│   └── sentinel/
-│       ├── main.tf               # Log Analytics + Sentinel + Analytics Rules
-│       └── threat-intelligence/
-│           └── main.tf           # Conectores TI: Microsoft TI + AlienVault OTX
+├── terraform/
+│   ├── environments/
+│   │   ├── lab/                  # Raíz Terraform del ambiente lab
+│   │   └── prod/                 # Raíz Terraform del ambiente prod
+│   ├── modules/                  # Network, ACI, MySQL, Key Vault y Sentinel
+│   └── setup-backend.sh          # Crea el Storage Account para tfstate
 ├── policies/conftest/
 │   └── azure_security.rego       # Políticas OPA (7 secciones)
 ├── sentinel/
@@ -44,7 +42,7 @@ lab-devsecops-azure/
 ```
 ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID
 BACKEND_RESOURCE_GROUP, BACKEND_STORAGE_ACCOUNT, BACKEND_CONTAINER
-BACKEND_KEY, BACKEND_ACCESS_KEY
+BACKEND_ACCESS_KEY
 OTX_API_KEY  (para Threat Intelligence)
 ```
 
@@ -57,12 +55,18 @@ git clone https://github.com/TU_USUARIO/lab-devsecops-azure.git
 # 2. Crear Storage Account para tfstate (una sola vez)
 chmod +x terraform/setup-backend.sh && ./terraform/setup-backend.sh
 
-# 3. Desplegar infraestructura
-cd terraform/ && terraform init && terraform apply -var="github_owner=TU_USUARIO"
+# 3. Configurar y desplegar LAB
+cd terraform/environments/lab
+cp backend.tf.example backend.tf
+cp terraform.tfvars.example terraform.tfvars
+# Completar backend.tf y terraform.tfvars
+terraform init
+terraform plan
+terraform apply
 
-# 4. Desplegar Sentinel
-cd sentinel/ && terraform init && terraform apply -var="alert_email=tu@email.com"
-
-# 5. Desplegar Threat Intelligence
-cd sentinel/threat-intelligence/ && terraform apply -var="otx_api_key=TU_KEY"
+# Para PROD usar terraform/environments/prod, con backend y state independientes.
 ```
+
+Toda la infraestructura, incluido Microsoft Sentinel, se despliega desde el
+ambiente seleccionado. No se ejecuta Terraform desde `terraform/` ni desde
+`modules/`.

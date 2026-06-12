@@ -82,7 +82,7 @@ resource "azurerm_monitor_diagnostic_setting" "key_vault" {
   enabled_log { category = "AuditEvent" }
   metric {
     category = "AllMetrics"
-     enabled = false
+    enabled  = false
   }
 }
 
@@ -110,7 +110,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "keyvault_unusual_access" {
   tactics                    = ["CredentialAccess", "InitialAccess"]
   techniques                 = ["T1555", "T1078"]
   depends_on                 = [azurerm_sentinel_log_analytics_workspace_onboarding.main]
-  query = <<-KQL
+  query                      = <<-KQL
     AzureDiagnostics
     | where ResourceType == "VAULTS"
     | where OperationName in ("SecretGet","KeyGet")
@@ -120,24 +120,24 @@ resource "azurerm_sentinel_alert_rule_scheduled" "keyvault_unusual_access" {
     | project TimeGenerated, CallerIP, OperationName, ResourceGroup, Resource
     | order by TimeGenerated desc
   KQL
-  query_frequency   = "PT5M"
-  query_period      = "PT10M"
-  trigger_operator  = "GreaterThan"
-  trigger_threshold = 0
+  query_frequency            = "PT5M"
+  query_period               = "PT10M"
+  trigger_operator           = "GreaterThan"
+  trigger_threshold          = 0
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true
-       lookback_duration = "PT1H"
+      enabled                 = true
+      lookback_duration       = "PT1H"
       reopen_closed_incidents = false
-       entity_matching_method = "AllEntities"
+      entity_matching_method  = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
     field_mapping {
-      identifier = "Address"
-       column_name = "CallerIP"
+      identifier  = "Address"
+      column_name = "CallerIP"
     }
   }
 }
@@ -153,24 +153,24 @@ resource "azurerm_sentinel_alert_rule_scheduled" "sql_injection" {
   tactics                    = ["Execution", "InitialAccess"]
   techniques                 = ["T1190", "T1059"]
   depends_on                 = [azurerm_sentinel_log_analytics_workspace_onboarding.main]
-  query = <<-KQL
+  query                      = <<-KQL
     ContainerInstanceLog_CL
     | where LogEntry_s has_any ("' OR ","1=1","UNION SELECT","DROP TABLE","'; --")
     | extend Payload = extract(@"name=([^&\s]+)", 1, LogEntry_s)
     | project TimeGenerated, ContainerGroup_s, Payload, LogEntry_s
     | order by TimeGenerated desc
   KQL
-  query_frequency   = "PT5M"
-  query_period      = "PT15M"
-  trigger_operator  = "GreaterThan"
-  trigger_threshold = 0
+  query_frequency            = "PT5M"
+  query_period               = "PT15M"
+  trigger_operator           = "GreaterThan"
+  trigger_threshold          = 0
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true
-       lookback_duration = "PT30M"
+      enabled                 = true
+      lookback_duration       = "PT30M"
       reopen_closed_incidents = true
-       entity_matching_method = "AllEntities"
+      entity_matching_method  = "AllEntities"
     }
   }
 }
@@ -186,7 +186,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "nsg_change" {
   tactics                    = ["DefenseEvasion", "LateralMovement"]
   techniques                 = ["T1562", "T1021"]
   depends_on                 = [azurerm_sentinel_log_analytics_workspace_onboarding.main]
-  query = <<-KQL
+  query                      = <<-KQL
     AzureActivity
     | where OperationNameValue == "MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/SECURITYRULES/WRITE"
     | where ActivityStatusValue == "Success"
@@ -197,24 +197,24 @@ resource "azurerm_sentinel_alert_rule_scheduled" "nsg_change" {
     | project TimeGenerated, Caller, DestPort, SourcePrefix, ResourceGroup
     | order by TimeGenerated desc
   KQL
-  query_frequency   = "PT5M"
-  query_period      = "PT10M"
-  trigger_operator  = "GreaterThan"
-  trigger_threshold = 0
+  query_frequency            = "PT5M"
+  query_period               = "PT10M"
+  trigger_operator           = "GreaterThan"
+  trigger_threshold          = 0
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true
-       lookback_duration = "PT1H"
+      enabled                 = true
+      lookback_duration       = "PT1H"
       reopen_closed_incidents = false
-       entity_matching_method = "AllEntities"
+      entity_matching_method  = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "Account"
     field_mapping {
-      identifier = "FullName"
-       column_name = "Caller"
+      identifier  = "FullName"
+      column_name = "Caller"
     }
   }
 }
@@ -230,7 +230,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "keyvault_brute_force" {
   tactics                    = ["CredentialAccess"]
   techniques                 = ["T1110"]
   depends_on                 = [azurerm_sentinel_log_analytics_workspace_onboarding.main]
-  query = <<-KQL
+  query                      = <<-KQL
     AzureDiagnostics
     | where ResourceType == "VAULTS"
     | where ResultType in ("Unauthorized","Forbidden")
@@ -239,24 +239,24 @@ resource "azurerm_sentinel_alert_rule_scheduled" "keyvault_brute_force" {
     | project TimeGenerated, CallerIP = callerIpAddress_s, FailedAttempts
     | order by FailedAttempts desc
   KQL
-  query_frequency   = "PT10M"
-  query_period      = "PT10M"
-  trigger_operator  = "GreaterThan"
-  trigger_threshold = 0
+  query_frequency            = "PT10M"
+  query_period               = "PT10M"
+  trigger_operator           = "GreaterThan"
+  trigger_threshold          = 0
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true
-       lookback_duration = "PT1H"
+      enabled                 = true
+      lookback_duration       = "PT1H"
       reopen_closed_incidents = false
-       entity_matching_method = "AllEntities"
+      entity_matching_method  = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
     field_mapping {
-      identifier = "Address"
-       column_name = "CallerIP"
+      identifier  = "Address"
+      column_name = "CallerIP"
     }
   }
 }
@@ -273,7 +273,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "ti_malicious_ip" {
   tactics                    = ["InitialAccess", "CredentialAccess"]
   techniques                 = ["T1078", "T1190"]
   depends_on                 = [azurerm_sentinel_log_analytics_workspace_onboarding.main]
-  query = <<-KQL
+  query                      = <<-KQL
     let TI_IPs = ThreatIntelligenceIndicator
       | where TimeGenerated > ago(7d) and Active == true
       | where isnotempty(NetworkIP) or isnotempty(NetworkSourceIP)
@@ -288,24 +288,24 @@ resource "azurerm_sentinel_alert_rule_scheduled" "ti_malicious_ip" {
     | project TimeGenerated, CallerIP, OperationName, TI_Type, TI_Score, TI_Source
     | order by TI_Score desc
   KQL
-  query_frequency   = "PT1H"
-  query_period      = "P1D"
-  trigger_operator  = "GreaterThan"
-  trigger_threshold = 0
+  query_frequency            = "PT1H"
+  query_period               = "P1D"
+  trigger_operator           = "GreaterThan"
+  trigger_threshold          = 0
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true
-       lookback_duration = "PT1H"
+      enabled                 = true
+      lookback_duration       = "PT1H"
       reopen_closed_incidents = false
-       entity_matching_method = "AllEntities"
+      entity_matching_method  = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
     field_mapping {
-      identifier = "Address"
-       column_name = "CallerIP"
+      identifier  = "Address"
+      column_name = "CallerIP"
     }
   }
 }
@@ -320,7 +320,7 @@ resource "azurerm_sentinel_alert_rule_scheduled" "ti_watchlist" {
   severity                   = "Medium"
   enabled                    = true
   depends_on                 = [azurerm_sentinel_log_analytics_workspace_onboarding.main, azurerm_sentinel_watchlist.lab_iocs]
-  query = <<-KQL
+  query                      = <<-KQL
     let WL = _GetWatchlist("watchlist-lab-iocs")
         | project IPAddress=tostring(IPAddress), ThreatType=tostring(ThreatType);
     AzureDiagnostics
@@ -331,24 +331,24 @@ resource "azurerm_sentinel_alert_rule_scheduled" "ti_watchlist" {
     | project TimeGenerated, SourceIP, OperationName, ThreatType
     | order by TimeGenerated desc
   KQL
-  query_frequency   = "PT5M"
-  query_period      = "PT1H"
-  trigger_operator  = "GreaterThan"
-  trigger_threshold = 0
+  query_frequency            = "PT5M"
+  query_period               = "PT1H"
+  trigger_operator           = "GreaterThan"
+  trigger_threshold          = 0
   incident_configuration {
     create_incident = true
     grouping {
-      enabled = true
-       lookback_duration = "PT30M"
+      enabled                 = true
+      lookback_duration       = "PT30M"
       reopen_closed_incidents = false
-       entity_matching_method = "AllEntities"
+      entity_matching_method  = "AllEntities"
     }
   }
   entity_mapping {
     entity_type = "IP"
     field_mapping {
-      identifier = "Address"
-       column_name = "SourceIP"
+      identifier  = "Address"
+      column_name = "SourceIP"
     }
   }
 }

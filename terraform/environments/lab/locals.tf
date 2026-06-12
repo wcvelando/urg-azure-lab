@@ -2,9 +2,9 @@
 
 locals {
   # ── Identificadores del ambiente ─────────────────────────
-  environment  = "lab"
-  app_name     = "studentrecords"
-  project      = "seguridad-cloud-ugr"
+  environment = "lab"
+  app_name    = "studentrecords"
+  project     = "seguridad-cloud-ugr"
 
   # Imagen resuelta: si se pasa container_image vacío, usa GHCR
   container_image = "ghcr.io/${var.github_owner}/student-records:latest"
@@ -38,7 +38,7 @@ locals {
 
   # ── Key Vault: soft delete mínimo para lab ────────────────
   soft_delete_retention = 7
-  purge_protection      = false  # false en lab para poder hacer destroy
+  purge_protection      = false # false en lab para poder hacer destroy
 
   # ── Sentinel: retención mínima para lab ──────────────────
   log_retention = 30

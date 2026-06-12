@@ -5,9 +5,7 @@ terraform.tfstate
 terraform.tfstate.backup
 *.tfplan
 tfplan
-terraform/backend.tf
-terraform/sentinel/backend.tf
-terraform/sentinel/threat-intelligence/backend.tf
+terraform/environments/*/backend.tf
 
 # Variables con secretos
 *.tfvars

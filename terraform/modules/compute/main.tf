@@ -35,10 +35,10 @@ resource "azurerm_container_group" "main" {
 
     # Variables de entorno NO sensibles
     environment_variables = {
-      FLASK_ENV  = var.flask_env
-      APP_PORT   = tostring(var.app_port)
-      DB_NAME    = var.db_name
-      DB_HOST    = var.db_host
+      FLASK_ENV = var.flask_env
+      APP_PORT  = tostring(var.app_port)
+      DB_NAME   = var.db_name
+      DB_HOST   = var.db_host
     }
 
     # Variables sensibles: nunca visibles en los logs del pipeline ni en el state en texto plano

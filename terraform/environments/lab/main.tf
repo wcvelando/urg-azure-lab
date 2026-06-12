@@ -4,12 +4,11 @@
 # Orquesta los módulos: network, keyvault, database, compute, sentinel
 #
 # Uso:
-#   cd environments/lab/
+#   cd terraform/environments/lab/
 #   cp backend.tf.example backend.tf  # completar con tus valores
+#   cp terraform.tfvars.example terraform.tfvars
 #   terraform init
-#   terraform apply -var="github_owner=TU_USUARIO" \
-#                   -var="alert_email=tu@email.com" \
-#                   -var="otx_api_key=TU_KEY"
+#   terraform apply
 # ============================================================
 
 terraform {
@@ -66,7 +65,7 @@ resource "random_password" "db_password" {
 
 resource "random_password" "flask_secret_key" {
   length  = 64
-  special = false  # evitar caracteres que puedan escaparse en env vars
+  special = false # evitar caracteres que puedan escaparse en env vars
 }
 
 # ── Módulo: Network ───────────────────────────────────────────

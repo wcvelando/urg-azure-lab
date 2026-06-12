@@ -31,7 +31,11 @@ resource "azurerm_mysql_flexible_server" "main" {
 
   # Prevenir destrucción accidental en producción
   lifecycle {
-    prevent_destroy = false  # Cambiar a true en producción
+    prevent_destroy = false # Cambiar a true en producción
+
+    # Azure asigna la zona cuando se omite. Provider 3.x puede intentar
+    # modificar ese valor calculado durante una actualización no relacionada.
+    ignore_changes = [zone]
   }
 }
 

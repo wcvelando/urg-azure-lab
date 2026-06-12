@@ -11,9 +11,9 @@
 # ============================================================
 
 locals {
-  environment  = "prod"
-  app_name     = "studentrecords"
-  project      = "seguridad-cloud-ugr"
+  environment = "prod"
+  app_name    = "studentrecords"
+  project     = "seguridad-cloud-ugr"
 
   container_image = "ghcr.io/${var.github_owner}/student-records:latest"
 

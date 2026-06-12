@@ -41,7 +41,7 @@ resource "azurerm_resource_group" "main" {
   tags     = local.common_tags
 
   lifecycle {
-    prevent_destroy = true  # En prod: no permitir terraform destroy sin quitar esto
+    prevent_destroy = true # En prod: no permitir terraform destroy sin quitar esto
   }
 }
 

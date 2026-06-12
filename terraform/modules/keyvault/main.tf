@@ -32,16 +32,16 @@ resource "azurerm_key_vault" "main" {
 
   # Restringir acceso de red (OPA KV-001: deny si no hay network_acls)
   network_acls {
-    default_action             = "Deny"
-    bypass                     = ["AzureServices"]
+    default_action = "Deny"
+    bypass         = "AzureServices"
     # Permite acceso desde la subnet del ACI
     virtual_network_subnet_ids = [var.subnet_public_id]
   }
 
   # Acceso para el SP de Terraform (administración)
   access_policy {
-    tenant_id = var.tenant_id
-    object_id = var.admin_object_id
+    tenant_id               = var.tenant_id
+    object_id               = var.admin_object_id
     secret_permissions      = ["Get", "List", "Set", "Delete", "Purge", "Recover"]
     key_permissions         = ["Get", "List", "Create", "Delete", "Purge"]
     certificate_permissions = ["Get", "List"]
@@ -49,7 +49,7 @@ resource "azurerm_key_vault" "main" {
 
   # Lifecycle: prevenir destrucción accidental del Key Vault en producción
   lifecycle {
-    prevent_destroy = false  # En lab: false para poder hacer destroy. En producción: cambiar a true
+    prevent_destroy = false # En lab: false para poder hacer destroy. En producción: cambiar a true
   }
 }
 
@@ -74,7 +74,7 @@ resource "azurerm_key_vault_secret" "db_password" {
   tags         = var.tags
 
   lifecycle {
-    ignore_changes = [value]  # No sobreescribir si el secreto ya existe y fue rotado manualmente
+    ignore_changes = [value] # No sobreescribir si el secreto ya existe y fue rotado manualmente
   }
 }
 

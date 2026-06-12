@@ -1,0 +1,7 @@
+location          = "centralus"
+github_owner      = "COMPLETAR_TU_USUARIO_GITHUB"
+alert_email       = "COMPLETAR_TU_EMAIL"
+db_admin_username = "sqladmin"
+
+# No guardar secretos aquí. Para OTX usar:
+# export TF_VAR_otx_api_key="..."
